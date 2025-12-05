@@ -1,0 +1,9 @@
+pandas
+numpy
+matplotlib
+ib_insync
+backtrader
+pyyaml
+python-dotenv
+loguru
+scipy
