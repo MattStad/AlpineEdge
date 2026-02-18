@@ -14,6 +14,8 @@ sys.path.append(str(Path(__file__).resolve().parent))
 try:
     from trade_brain import HttpClient, decide_for_ticker
     from config import DB_PATH
+    from sector_strategies import get_strategy_for_ticker
+    from news.news_sentiment import calculate_news_sentiment, format_sentiment_for_prompt
 except ImportError as e:
     print(f"[CRITICAL] Import Error: {e}")
     sys.exit(1)
@@ -201,14 +203,31 @@ async def run_swarm_pipeline():
 
             if not company_news:
                 company_news = ["No specific news found in DB for this ticker."]
+            
+            # 3.1 NEWS SENTIMENT (neu!)
+            try:
+                news_sentiment = calculate_news_sentiment(ticker, days=7, min_importance=3)
+                sentiment_text = format_sentiment_for_prompt(news_sentiment)
+            except Exception as e:
+                print(f"[WARN] News sentiment failed for {ticker}: {e}")
+                sentiment_text = ""
+            
+            # 3.2 SECTOR CONTEXT (neu!)
+            try:
+                sector_strategy = get_strategy_for_ticker(ticker)
+                sector_context = sector_strategy.build_sector_context()
+            except Exception as e:
+                print(f"[WARN] Sector context failed for {ticker}: {e}")
+                sector_context = ""
 
-            # 4. SWARM ENTSCHEIDUNG
+            # 4. SWARM ENTSCHEIDUNG (jetzt mit Sector Context + Sentiment)
             final, all_votes = await decide_for_ticker(
                 client,
                 ticker,
                 p_data,
                 macro_ctx,
-                company_news
+                company_news,
+                sector_context=sector_context + "\n" + sentiment_text
             )
 
             if final:

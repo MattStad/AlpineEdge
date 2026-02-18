@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# AlpineEdge Specific
+data/raw/*.json
+data/processed/*.json
+data/news.db
+data/news.db-wal
+data/news.db-shm
+backtest_results/
+*.db
+*.db-wal
+*.db-shm
+.idea/

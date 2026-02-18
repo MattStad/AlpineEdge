@@ -202,9 +202,21 @@ def compute_performance_table(history_df: pd.DataFrame, price_col: str) -> Dict[
     return performance
 
 
+def calculate_momentum(prices: pd.Series, window: int = 20) -> float:
+    """
+    Berechnet Momentum (% Change über window Tage).
+    Positive = Uptrend, Negative = Downtrend
+    """
+    if len(prices) < window:
+        return 0.0
+    
+    momentum = (prices.iloc[-1] / prices.iloc[-window] - 1) * 100
+    return round(momentum, 2)
+
+
 def compute_risk_metrics(history_df: pd.DataFrame, price_col: str) -> Dict[str, Any]:
     """
-    Berechnet Volatilität, Sharpe Ratio und Max Drawdown.
+    Berechnet Volatilität, Sharpe Ratio, Max Drawdown und Momentum.
     """
     prices = history_df[price_col].astype(float)
     ret_1d = prices.pct_change().dropna()
@@ -229,11 +241,17 @@ def compute_risk_metrics(history_df: pd.DataFrame, price_col: str) -> Dict[str, 
     drawdown = (prices / running_max) - 1.0
     max_drawdown_raw = float(drawdown.min())
     max_drawdown_pct = round(max_drawdown_raw * 100, 2)
+    
+    # Momentum Indicators
+    momentum_20d = calculate_momentum(prices, window=20)
+    momentum_50d = calculate_momentum(prices, window=50)
 
     return {
         "vol_annual": vol_annual_pct,  # in %
         "sharpe_annual": sharpe_annual,  # Ratio
-        "max_drawdown": max_drawdown_pct  # in %
+        "max_drawdown": max_drawdown_pct,  # in %
+        "momentum_20d": momentum_20d,  # % change last 20 days
+        "momentum_50d": momentum_50d   # % change last 50 days
     }
 
 

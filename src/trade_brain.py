@@ -77,7 +77,7 @@ JSON_SCHEMA_BLOCK = """
 
 
 def build_swarm_prompt(ticker: str, processed_data: Dict[str, Any], macro_context: Dict[str, str],
-                       company_news: List[str]) -> str:
+                       company_news: List[str], sector_context: str = "") -> str:
     # Daten Formatierung
     perf = processed_data.get("performance", {})
     perf_str = ", ".join([f"{k}: {v}%" for k, v in perf.items() if v is not None])
@@ -88,12 +88,14 @@ def build_swarm_prompt(ticker: str, processed_data: Dict[str, Any], macro_contex
 
     comp_news_str = "\n".join(company_news[:5]) if company_news else "No specific news available."
 
+    sector_block = f"\n{sector_context}\n" if sector_context else ""
+    
     return f"""
 You are an expert financial analyst with a "Contrarian Value" mindset.
 You do not follow simple rules. You think deeply about the narrative vs. the data.
 
 TARGET: {ticker}
-
+{sector_block}
 === 1. THE DATA (The Truth) ===
 Performance History: {perf_str}
 Risk Metrics: {metrics_str}
@@ -164,8 +166,8 @@ async def _call_ollama_model(client: HttpClient, model_name: str, prompt: str, t
 
 
 async def get_ai_trade_votes(client: HttpClient, ticker: str, processed_data: Dict, macro_context: Dict,
-                             company_news: List) -> List[TradeDecision]:
-    prompt = build_swarm_prompt(ticker, processed_data, macro_context, company_news)
+                             company_news: List, sector_context: str = "") -> List[TradeDecision]:
+    prompt = build_swarm_prompt(ticker, processed_data, macro_context, company_news, sector_context)
     print(f"\n[SWARM] {ticker}: Agents analyzing...")
 
     decisions = []
@@ -185,57 +187,83 @@ async def get_ai_trade_votes(client: HttpClient, ticker: str, processed_data: Di
     return decisions
 
 
-def majority_vote(decisions: List[TradeDecision]) -> Dict[str, Any]:
+def confidence_weighted_vote(decisions: List[TradeDecision]) -> Dict[str, Any]:
     """
-    Score-basiertes Voting (wie besprochen, das behalten wir bei,
-    damit wir nicht wieder in die HOLD-Falle tappen).
+    Confidence-Weighted Voting System.
+    
+    Jedes Vote wird mit seiner Confidence gewichtet:
+    - BUY Signal = +confidence
+    - SELL Signal = -confidence  
+    - HOLD = 0
+    
+    Das verhindert die "HOLD-Falle" und gibt hochconfident Votes mehr Gewicht.
     """
-    if not decisions: return None
+    if not decisions:
+        return None
 
-    score = 0
+    weighted_score = 0.0
+    total_confidence = 0.0
+    
     buy_votes = 0
     sell_votes = 0
     hold_votes = 0
 
     for d in decisions:
+        weight = d.confidence
+        
         if d.action == "BUY":
-            score += 1
+            weighted_score += weight
             buy_votes += 1
         elif d.action == "SELL":
-            score -= 1
+            weighted_score -= weight
             sell_votes += 1
         else:
             hold_votes += 1
+            # HOLD adds 0 to weighted_score
+        
+        total_confidence += weight
+
+    # Normalisiere Score auf -1 bis +1
+    avg_score = weighted_score / total_confidence if total_confidence > 0 else 0.0
+    
+    # Dynamischer Threshold basierend auf Confidence
+    # 30% mehr BUY- als SELL-confidence nötig für BUY Signal
+    confidence_threshold = 0.3
 
     final_action = "HOLD"
-    # Schwelle für BUY/SELL
-    threshold = 1.5
-
-    if score >= threshold:
+    if avg_score > confidence_threshold:
         final_action = "BUY"
-    elif score <= -threshold:
+    elif avg_score < -confidence_threshold:
         final_action = "SELL"
 
+    # Sammle relevante Details
     if final_action == "BUY":
         relevant = [d for d in decisions if d.action == "BUY"]
     elif final_action == "SELL":
         relevant = [d for d in decisions if d.action == "SELL"]
     else:
-        relevant = [d for d in decisions if d.action == "HOLD"]
-        if not relevant: relevant = decisions
+        relevant = decisions
 
     avg_conf = sum(d.confidence for d in relevant) / len(relevant) if relevant else 0.0
 
     return {
         "action": final_action,
-        "vote_count": f"Score: {score} (B:{buy_votes}, S:{sell_votes}, H:{hold_votes})",
+        "vote_count": f"B:{buy_votes}, S:{sell_votes}, H:{hold_votes}",
+        "confidence": round(abs(avg_score), 2),  # Absolute confidence im Signal
+        "weighted_score": round(avg_score, 3),
         "avg_confidence": round(avg_conf, 2),
         "details": relevant
     }
 
 
+# Legacy function für Backwards Compatibility
+def majority_vote(decisions: List[TradeDecision]) -> Dict[str, Any]:
+    """DEPRECATED: Use confidence_weighted_vote() instead."""
+    return confidence_weighted_vote(decisions)
+
+
 async def decide_for_ticker(client: HttpClient, ticker: str, processed_data: Dict, macro_context: Dict,
-                            company_news: List):
-    decisions = await get_ai_trade_votes(client, ticker, processed_data, macro_context, company_news)
-    final = majority_vote(decisions)
+                            company_news: List, sector_context: str = ""):
+    decisions = await get_ai_trade_votes(client, ticker, processed_data, macro_context, company_news, sector_context)
+    final = confidence_weighted_vote(decisions)
     return final, decisions

@@ -97,6 +97,40 @@ MANUAL_ALIASES = {
 
     # aus deinen Logs:
     _normalize_token("LENZ.VI"): "LNZ.VI",
+    
+    # Weitere häufige Aliases
+    _normalize_token("VIENNA INSURANCE"): "VIG.VI",
+    _normalize_token("VIENNA INSURANCE GROUP"): "VIG.VI",
+    _normalize_token("VIG"): "VIG.VI",
+    
+    _normalize_token("ERSTE"): "EBS.VI",
+    _normalize_token("ERSTE BANK"): "EBS.VI",
+    _normalize_token("EBS"): "EBS.VI",
+    
+    _normalize_token("RBI"): "RBI.VI",
+    _normalize_token("RAIFFEISEN"): "RBI.VI",
+    
+    _normalize_token("VERBUND"): "VER.VI",
+    _normalize_token("VER"): "VER.VI",
+    
+    _normalize_token("VOEST"): "VOE.VI",
+    _normalize_token("VOESTALPINE"): "VOE.VI",
+    
+    _normalize_token("ANDRITZ"): "ANDR.VI",
+    _normalize_token("ANDR"): "ANDR.VI",
+    
+    _normalize_token("AT&S"): "ATS.VI",
+    _normalize_token("ATS"): "ATS.VI",
+    
+    _normalize_token("STRABAG"): "STR.VI",
+    _normalize_token("STR"): "STR.VI",
+    
+    _normalize_token("CA IMMO"): "CAI.VI",
+    _normalize_token("CA IMMOBILIEN"): "CAI.VI",
+    
+    _normalize_token("POST"): "POST.VI",
+    _normalize_token("ÖSTERREICHISCHE POST"): "POST.VI",
+    _normalize_token("AUSTRIAN POST"): "POST.VI",
 }
 
 

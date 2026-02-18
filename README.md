@@ -39,6 +39,19 @@ Das System besteht aus drei Hauptkomponenten:
 
 ---
 
+## 🆕 What's New (v2.0)
+
+**Major Updates:**
+- ✅ **Portfolio Management System** - Position sizing, stop loss/take profit, P&L tracking
+- ✅ **Backtesting Framework** - Test strategies on historical data
+- ✅ **Confidence-Weighted Voting** - Smarter AI Council decisions (fixes HOLD-trap)
+- ✅ **Sector-Aware Strategies** - Customized analysis per sector (Banking, Energy, etc.)
+- ✅ **News Sentiment Scoring** - Quantified news impact analysis
+- ✅ **Risk Manager** - Portfolio limits, sector exposure, correlation checks
+- ✅ **Momentum Filters** - Only buy in uptrends
+
+See `CHANGELOG.md` for full details.
+
 ## ⚙️ Installation
 
 ### Voraussetzungen
@@ -111,14 +124,50 @@ python src/strategy_runner.py
 ```text
 [SWARM] OMV.VI: Agents analyzing...
   > llama3.1 thinking...
-    -> HOLD (0.60) : Mixed signals from global and local markets.
+    -> BUY (0.65) : Strong momentum + positive sentiment
   > qwen2.5 thinking...
-    -> BUY (0.75) : Positive performance trend and strong historical returns.
+    -> BUY (0.75) : Sector tailwinds (oil prices up)
   > mistral-nemo thinking...
-    -> BUY (0.85) : Strong long-term performance and positive news catalysts.
+    -> BUY (0.70) : Technical breakout confirmed
   ...
-  => RESULT: BUY (Conf: 0.8) | Votes: 4/5
+  => RESULT: BUY (Conf: 0.72) | Score: B:3, S:0, H:2
 ```
+
+### 4. Backtesting (Strategie validieren)
+Teste deine Strategie auf historischen Daten:
+
+```bash
+# Simple Rule-Based Backtest (schnell)
+python run_backtest.py
+
+# Mit echtem AI Council (langsam, aber realistisch)
+python run_backtest.py --ai-council
+```
+
+**Output:**
+```text
+[BACKTEST] Starting backtest from 2023-01-01 to 2024-12-31
+[BACKTEST] Universe: 8 tickers
+[BACKTEST] Initial Capital: $10,000.00
+
+[BACKTEST] Progress: 50.0% | 2023-07-01 | Portfolio Value: $11,234.00
+...
+[BACKTEST] Completed!
+============================================================
+Final Portfolio Value: $12,456.78
+Total Return: 24.57%
+CAGR: 11.23%
+Sharpe Ratio: 1.45
+Max Drawdown: -8.34%
+Win Rate: 62.5%
+Total Trades: 48
+============================================================
+```
+
+Ergebnisse werden gespeichert in `backtest_results/`:
+- `backtest_metrics_*.json` - Performance Kennzahlen
+- `backtest_trades_*.csv` - Alle Trades mit P&L
+- `backtest_equity_*.csv` - Equity Curve (täglich)
 
 ---
 
