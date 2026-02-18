@@ -49,7 +49,7 @@ Das System besteht aus drei Hauptkomponenten:
 ### 1. Repository klonen
 
 ```bash
-git clone [https://github.com/dein-username/AlpineEdge.git](https://github.com/dein-username/AlpineEdge.git)
+git clone [https://github.com/MattStad/AlpineEdge.git](https://github.com/MattStad/AlpineEdge.git)
 cd AlpineEdge
 ```
 
