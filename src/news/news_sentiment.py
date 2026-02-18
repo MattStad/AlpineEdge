@@ -30,7 +30,7 @@ def get_db_connection():
     return conn
 
 
-def analyze_headline_sentiment(headline: str, model: str = "llama3.2:3b") -> float:
+def analyze_headline_sentiment(headline: str, model: str = "llama3.2:3b", timeout: int = 10) -> float:
     """
     Analysiert Sentiment eines einzelnen Headlines.
     
@@ -39,6 +39,10 @@ def analyze_headline_sentiment(headline: str, model: str = "llama3.2:3b") -> flo
     """
     if not OLLAMA_AVAILABLE:
         return 0.0
+    
+    # Kürze zu lange Headlines (Ollama Stabilitätsproblem)
+    if len(headline) > 200:
+        headline = headline[:197] + "..."
     
     prompt = f"""Rate the sentiment of this financial news headline on a scale from -1 (very negative) to +1 (very positive).
 
@@ -55,7 +59,11 @@ Respond with ONLY a single number between -1.0 and +1.0, nothing else."""
         response = ollama.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.1, "num_predict": 20}
+            options={
+                "temperature": 0.1, 
+                "num_predict": 20,
+                "num_ctx": 512  # Kleinerer Context für Stabilität
+            }
         )
         
         text = response["message"]["content"].strip()
@@ -75,7 +83,8 @@ Respond with ONLY a single number between -1.0 and +1.0, nothing else."""
             return 0.0
     
     except Exception as e:
-        print(f"[SENTIMENT] Error analyzing headline: {e}")
+        # Graceful degradation - don't crash the whole pipeline
+        print(f"[SENTIMENT] Error analyzing headline (will use neutral): {str(e)[:100]}")
         return 0.0
 
 
@@ -83,7 +92,8 @@ def calculate_news_sentiment(
     ticker: str,
     days: int = 7,
     min_importance: int = 3,
-    model: str = "llama3.2:3b"
+    model: str = "llama3.2:3b",
+    max_headlines: int = 5
 ) -> Dict[str, Any]:
     """
     Berechnet aggregiertes News Sentiment für einen Ticker.
@@ -93,10 +103,21 @@ def calculate_news_sentiment(
         days: Zeitfenster in Tagen
         min_importance: Minimum Importance Score (0-10)
         model: Ollama Model für Sentiment Analysis
+        max_headlines: Max Headlines zu analysieren (Ollama Stabilität)
     
     Returns:
         Dict mit score, count, trend, recent_headlines
     """
+    if not OLLAMA_AVAILABLE:
+        # Fallback wenn Ollama nicht verfügbar
+        return {
+            "score": 0.0,
+            "count": 0,
+            "trend": "neutral",
+            "recent_headlines": [],
+            "error": "Ollama not available"
+        }
+    
     conn = get_db_connection()
     
     cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
@@ -108,10 +129,11 @@ def calculate_news_sentiment(
           AND published_at >= ?
           AND importance >= ?
         ORDER BY published_at DESC
+        LIMIT ?
     """
     
     try:
-        df = pd.read_sql(query, conn, params=[ticker, cutoff_date, min_importance])
+        df = pd.read_sql(query, conn, params=[ticker, cutoff_date, min_importance, max_headlines])
     except Exception as e:
         print(f"[SENTIMENT] DB Error: {e}")
         conn.close()
@@ -132,23 +154,48 @@ def calculate_news_sentiment(
             "recent_headlines": []
         }
     
-    # Sentiment Analysis für jede Headline
+    # Sentiment Analysis für jede Headline (mit Error Handling)
     sentiments = []
     weighted_sentiments = []
+    analyzed = 0
+    errors = 0
     
     for _, row in df.iterrows():
         headline = row['headline']
         importance = row.get('importance', 5)
         
-        # Analyze
-        sentiment = analyze_headline_sentiment(headline, model)
-        
-        # Weight mit Importance (Importance 10 = 2x weight, Importance 5 = 1x weight)
-        weight = importance / 5.0
-        weighted = sentiment * weight
-        
-        sentiments.append(sentiment)
-        weighted_sentiments.append(weighted)
+        # Analyze (kann fehlschlagen bei Ollama Überlastung)
+        try:
+            sentiment = analyze_headline_sentiment(headline, model)
+            analyzed += 1
+            
+            # Weight mit Importance (Importance 10 = 2x weight, Importance 5 = 1x weight)
+            weight = importance / 5.0
+            weighted = sentiment * weight
+            
+            sentiments.append(sentiment)
+            weighted_sentiments.append(weighted)
+            
+            # Kleine Pause zwischen Calls um Ollama zu entlasten
+            import time
+            time.sleep(0.2)
+            
+        except Exception as e:
+            errors += 1
+            print(f"[SENTIMENT] Skipping headline due to error: {str(e)[:50]}")
+            # Skip this headline, don't crash
+            continue
+    
+    # Wenn zu viele Fehler, return neutral
+    if errors > len(df) / 2:
+        print(f"[SENTIMENT] Too many errors ({errors}/{len(df)}), returning neutral sentiment")
+        return {
+            "score": 0.0,
+            "count": len(df),
+            "trend": "neutral",
+            "recent_headlines": df.head(3)['headline'].tolist(),
+            "error": f"Ollama unstable ({errors} errors)"
+        }
     
     # Aggregated Scores
     avg_sentiment = np.mean(sentiments)

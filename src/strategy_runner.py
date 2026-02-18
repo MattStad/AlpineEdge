@@ -167,7 +167,7 @@ def get_macro_context() -> Dict[str, str]:
 # Main Pipeline
 # ---------------------------------------------------------------------------
 
-async def run_swarm_pipeline():
+async def run_swarm_pipeline(enable_sentiment: bool = True):
     # 1. Macro Context laden
     try:
         macro_ctx = get_macro_context()
@@ -204,13 +204,28 @@ async def run_swarm_pipeline():
             if not company_news:
                 company_news = ["No specific news found in DB for this ticker."]
             
-            # 3.1 NEWS SENTIMENT (neu!)
-            try:
-                news_sentiment = calculate_news_sentiment(ticker, days=7, min_importance=3)
-                sentiment_text = format_sentiment_for_prompt(news_sentiment)
-            except Exception as e:
-                print(f"[WARN] News sentiment failed for {ticker}: {e}")
-                sentiment_text = ""
+            # 3.1 NEWS SENTIMENT (neu! - kann fehlschlagen wenn Ollama überlastet)
+            sentiment_text = ""
+            if enable_sentiment:
+                try:
+                    news_sentiment = calculate_news_sentiment(
+                        ticker, 
+                        days=7, 
+                        min_importance=3,
+                        max_headlines=3  # Limit to 3 für Stabilität
+                    )
+                    
+                    # Check if sentiment analysis worked
+                    if news_sentiment.get('error'):
+                        print(f"[INFO] {ticker}: Sentiment skipped ({news_sentiment['error']})")
+                    else:
+                        sentiment_text = format_sentiment_for_prompt(news_sentiment)
+                        
+                except Exception as e:
+                    print(f"[WARN] News sentiment failed for {ticker}: {str(e)[:100]}")
+                    # Continue without sentiment
+            else:
+                print(f"[INFO] {ticker}: Sentiment disabled")
             
             # 3.2 SECTOR CONTEXT (neu!)
             try:
@@ -247,7 +262,16 @@ async def run_swarm_pipeline():
 
 
 if __name__ == "__main__":
+    import sys
+    
+    # Optional: Disable sentiment analysis via command line
+    # Usage: python strategy_runner.py --no-sentiment
+    enable_sentiment = "--no-sentiment" not in sys.argv
+    
+    if not enable_sentiment:
+        print("[INFO] News sentiment analysis DISABLED (faster, more stable)")
+    
     try:
-        asyncio.run(run_swarm_pipeline())
+        asyncio.run(run_swarm_pipeline(enable_sentiment=enable_sentiment))
     except KeyboardInterrupt:
         print("\n[STOP] User interrupted.")
