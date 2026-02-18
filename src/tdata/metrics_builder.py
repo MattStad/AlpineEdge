@@ -4,7 +4,7 @@
 # und erstellt ein neues, kompaktes JSON im 'processed' Ordner.
 #
 # Inhalt:
-#  - Summary Metriken (Vol %, Sharpe, Drawdown %)
+#  - Summary Metriken (Vol %, Sharpe, Drawdown %, RSI)
 #  - Performance Tabelle (1T, 1W, 1M, 6M, YTD, 1J, 3J, 5J, MAX) in Prozent
 #  - Preise der letzten Woche
 #  - Sonstige Infos (Profile, Financials, Empfehlungen)
@@ -119,12 +119,33 @@ def _prepare_history_df(history_block: Dict[str, Any]) -> pd.DataFrame:
 # Berechnung der Performance & Metriken
 # --------------------------------------------------------------------
 
+def calculate_rsi(series: pd.Series, period: int = 14) -> float:
+    """Berechnet den Relative Strength Index (RSI)."""
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+    # Vermeide Division durch Null
+    loss = loss.replace(0, np.nan)
+
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+
+    # Letzten validen Wert zurückgeben, fallback auf 50 (neutral)
+    try:
+        val = rsi.iloc[-1]
+        if pd.isna(val):
+            return 50.0
+        return float(val)
+    except:
+        return 50.0
+
+
 def compute_performance_table(history_df: pd.DataFrame, price_col: str) -> Dict[str, Any]:
     """
     Berechnet prozentuale Änderungen für verschiedene Zeiträume:
     1d, 1w, 1m, 6m, YTD, 1y, 3y, 5y, MAX.
-
-    WICHTIG: Rückgabe in Prozent (z.B. 5.23 für 5.23%).
+    Rückgabe in Prozent (z.B. 5.23 für 5.23%).
     """
     if history_df.empty:
         return {}
@@ -174,7 +195,7 @@ def compute_performance_table(history_df: pd.DataFrame, price_col: str) -> Dict[
 
     performance["YTD"] = calc_pct_change_as_percent(ytd_base, current_price)
 
-    # 4. MAX (Gesamte Historie) -> Return über die maximale Dauer
+    # 4. MAX (Gesamte Historie)
     first_price = float(prices.iloc[0])
     performance["MAX"] = calc_pct_change_as_percent(first_price, current_price)
 
@@ -184,8 +205,6 @@ def compute_performance_table(history_df: pd.DataFrame, price_col: str) -> Dict[
 def compute_risk_metrics(history_df: pd.DataFrame, price_col: str) -> Dict[str, Any]:
     """
     Berechnet Volatilität, Sharpe Ratio und Max Drawdown.
-    Volatilität und Drawdown werden in Prozent (x100) zurückgegeben.
-    Sharpe bleibt eine Ratio.
     """
     prices = history_df[price_col].astype(float)
     ret_1d = prices.pct_change().dropna()
@@ -198,7 +217,6 @@ def compute_risk_metrics(history_df: pd.DataFrame, price_col: str) -> Dict[str, 
     vol_annual_pct = round(vol_annual_raw * 100, 2)
 
     # Sharpe Ratio (Mean / Std * sqrt(252))
-    # Sharpe ist keine Prozentzahl, daher keine *100 hier (außer für Basiswerte)
     mean_return_daily = ret_1d.mean()
     if vol_annual_raw > 0:
         sharpe_annual = float(mean_return_daily * 252 / vol_annual_raw)
@@ -225,7 +243,7 @@ def compute_risk_metrics(history_df: pd.DataFrame, price_col: str) -> Dict[str, 
 
 def add_metrics_to_json(ticker: str) -> None:
     """
-    Lädt Raw-JSON, berechnet Metriken, extrahiert wichtige Infos
+    Lädt Raw-JSON, berechnet Metriken (inkl. RSI), extrahiert wichtige Infos
     und speichert ein 'processed' JSON.
     """
     try:
@@ -261,7 +279,10 @@ def add_metrics_to_json(ticker: str) -> None:
     performance = compute_performance_table(history_df, price_col)
     risk_metrics = compute_risk_metrics(history_df, price_col)
 
-    # 3. Preise der letzten Woche extrahieren (letzte 7 Einträge)
+    # NEU: RSI Berechnung
+    current_rsi = calculate_rsi(history_df[price_col])
+
+    # 3. Preise der letzten Woche extrahieren
     last_week_df = history_df.tail(7).copy()
     last_week_data = _df_to_records(last_week_df)
 
@@ -273,6 +294,7 @@ def add_metrics_to_json(ticker: str) -> None:
         "generated_at": str(pd.Timestamp.now()),
         "metrics": {
             **risk_metrics,  # Vol%, Sharpe, Drawdown%
+            "rsi_14": round(current_rsi, 2),  # RSI Indikator
             "current_price": round(current_price_val, 2)
         },
         "performance": performance,  # Jetzt in Prozent!
@@ -297,3 +319,9 @@ def add_metrics_for_universe(universe: List[str]) -> None:
             add_metrics_to_json(t)
         except Exception as e:
             print(f"[METRICS] Failed for {t}: {e}")
+
+
+if __name__ == "__main__":
+    # Test
+    UNIVERSE = ["VOE.VI", "EBS.VI", "RBI.VI", "OMV.VI", "ANDR.VI"]
+    add_metrics_for_universe(UNIVERSE)

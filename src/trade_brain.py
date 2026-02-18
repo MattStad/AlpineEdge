@@ -62,7 +62,7 @@ class TradeDecision:
 
 
 # ---------------------------------------------------------------------------
-# PROMPT ENGINEERING (OPTIMIZED)
+# PROMPT ENGINEERING (Reasoning Focused)
 # ---------------------------------------------------------------------------
 
 JSON_SCHEMA_BLOCK = """
@@ -71,59 +71,50 @@ JSON_SCHEMA_BLOCK = """
   "confidence": 0.0 to 1.0,
   "max_position_pct": 0.0 to 0.10,
   "horizon_days": 10 to 30,
-  "reason": "concise explanation, max 200 chars"
+  "reason": "short explanation of your synthesis"
 }
 """
 
 
 def build_swarm_prompt(ticker: str, processed_data: Dict[str, Any], macro_context: Dict[str, str],
                        company_news: List[str]) -> str:
-    """
-    Erstellt einen balancierten Prompt, der FOMO verhindert.
-    """
-
-    # 1. Performance Table formatieren
+    # Daten Formatierung
     perf = processed_data.get("performance", {})
     perf_str = ", ".join([f"{k}: {v}%" for k, v in perf.items() if v is not None])
 
-    # 2. Risk Metrics formatieren
     metrics = processed_data.get("metrics", {})
-    metrics_str = f"Volatility: {metrics.get('vol_annual', 'N/A')}%, Sharpe: {metrics.get('sharpe_annual', 'N/A')}, MaxDD: {metrics.get('max_drawdown', 'N/A')}%"
+    rsi = metrics.get('rsi_14', 'N/A')
+    metrics_str = f"Vol: {metrics.get('vol_annual', 'N/A')}%, Sharpe: {metrics.get('sharpe_annual', 'N/A')}, MaxDD: {metrics.get('max_drawdown', 'N/A')}%, RSI: {rsi}"
 
-    # 3. News formatieren
     comp_news_str = "\n".join(company_news[:5]) if company_news else "No specific news available."
 
     return f"""
-You are a disciplined Senior Portfolio Manager at a top-tier Quant Fund. 
-Your philosophy is: "Protect Capital First, Capture Alpha Second."
-You do NOT chase hype. You look for asymmetric risk/reward.
+You are an expert financial analyst with a "Contrarian Value" mindset.
+You do not follow simple rules. You think deeply about the narrative vs. the data.
 
-ANALYSIS TARGET: {ticker}
+TARGET: {ticker}
 
-=== 1. MARKET REGIME (CONTEXT) ===
-Global News: {macro_context.get('global', 'N/A')[:400]}...
-Local News: {macro_context.get('austria', 'N/A')[:400]}...
+=== 1. THE DATA (The Truth) ===
+Performance History: {perf_str}
+Risk Metrics: {metrics_str}
 
-=== 2. ASSET DATA ===
-Performance: {perf_str}
-Risk Stats: {metrics_str}
-Current Price: {metrics.get('current_price', 'N/A')}
-
-=== 3. LATEST INTEL ===
+=== 2. THE NARRATIVE (The Noise?) ===
+Company News:
 {comp_news_str}
 
-=== 4. ANALYSIS FRAMEWORK ===
-A) **Valuation & Overextension Check:** - Has the asset rallied too hard, too fast (e.g. >50% YTD)? If yes, consider SELLING/TAKING PROFITS (Mean Reversion risk).
-   - Is the 1-week performance negative while the long-term is positive? This might be a "Buy the Dip" opportunity.
+Macro Context (Global/Local):
+Global: {macro_context.get('global', 'N/A')[:300]}...
+Local: {macro_context.get('austria', 'N/A')[:300]}...
 
-B) **Risk Check:**
-   - Is the Sharpe Ratio below 0.5? If yes, the return does not justify the volatility -> HOLD or SELL.
-   - Are there negative news headlines? If yes, be defensive.
+=== YOUR TASK ===
+Synthesize these inputs to form a conviction.
+Ask yourself:
+1. **Discrepancy:** Is the price dropping (bad performance) but the news is actually good/neutral? (Opportunity?)
+2. **Momentum:** Is the price rising on strong volume/news, confirming a breakout?
+3. **Overreaction:** Is the market panicking over global news that doesn't affect this specific local company?
 
-C) **Decision Logic:**
-   - **BUY**: Only if Trend is Up AND News is Good AND Asset is NOT overextended. (High conviction).
-   - **SELL**: If Trend is broken, News is bad, OR Asset is significantly overbought/euphoric.
-   - **HOLD**: If signals are mixed, volatility is too high, or you lack conviction.
+Do not be afraid to take a stance. If the data supports a move, recommend it.
+Only recommend HOLD if you genuinely have no edge or signals are perfectly conflicting.
 
 OUTPUT:
 Return ONLY a single JSON object.
@@ -148,7 +139,7 @@ async def _call_ollama_model(client: HttpClient, model_name: str, prompt: str, t
         "messages": [{"role": "user", "content": prompt}],
         "format": "json",
         "stream": False,
-        "options": {"temperature": 0.2, "num_ctx": 4096}  # Temperatur runter für mehr Disziplin
+        "options": {"temperature": 0.3, "num_ctx": 4096}  # Etwas mehr Temp für Kreativität
     }
 
     status, data = await client.post_json(OLLAMA_URL, payload)
@@ -184,7 +175,6 @@ async def get_ai_trade_votes(client: HttpClient, ticker: str, processed_data: Di
             d = await _call_ollama_model(client, model, prompt, ticker)
             decisions.append(d)
 
-            # Farb-Ausgabe für Konsole
             color = "\033[92m" if d.action == "BUY" else "\033[91m" if d.action == "SELL" else "\033[93m"
             reset = "\033[0m"
             print(f"    -> {color}{d.action}{reset} ({d.confidence:.2f}) : {d.reason}")
@@ -196,43 +186,49 @@ async def get_ai_trade_votes(client: HttpClient, ticker: str, processed_data: Di
 
 
 def majority_vote(decisions: List[TradeDecision]) -> Dict[str, Any]:
+    """
+    Score-basiertes Voting (wie besprochen, das behalten wir bei,
+    damit wir nicht wieder in die HOLD-Falle tappen).
+    """
     if not decisions: return None
 
-    actions = [d.action for d in decisions]
-    cnt = Counter(actions)
-    if not cnt: return None
+    score = 0
+    buy_votes = 0
+    sell_votes = 0
+    hold_votes = 0
 
-    best_action, count = cnt.most_common(1)[0]
-    total_votes = len(decisions)
+    for d in decisions:
+        if d.action == "BUY":
+            score += 1
+            buy_votes += 1
+        elif d.action == "SELL":
+            score -= 1
+            sell_votes += 1
+        else:
+            hold_votes += 1
 
-    # STRENGERE LOGIK:
-    # Wir brauchen mindestens 3 Stimmen (bei 5 Agenten) für eine Richtung.
-    # Sonst ist es "Uneinigkeit" -> HOLD.
-    consensus_threshold = 3
+    final_action = "HOLD"
+    # Schwelle für BUY/SELL
+    threshold = 1.5
 
-    final_action = best_action
+    if score >= threshold:
+        final_action = "BUY"
+    elif score <= -threshold:
+        final_action = "SELL"
 
-    if count < consensus_threshold:
-        # Wenn z.B. 2 BUY, 2 HOLD, 1 SELL -> Kein Konsens -> HOLD
-        final_action = "HOLD"
-        print(f"    [VOTE] No clear majority ({count}/{total_votes} for {best_action}). Defaulting to HOLD.")
-
-    # Filtere Details basierend auf final_action (oder best_action falls wir HOLD erzwingen)
-    # Wir nehmen die Votes, die zur finalen Entscheidung passen.
-    # Wenn Fallback auf HOLD, nehmen wir die HOLD votes.
-    relevant = [d for d in decisions if d.action == final_action]
-
-    # Falls wir auf HOLD gefallen sind, aber niemand HOLD gestimmt hat (z.B. 2 BUY, 2 SELL, 1 ???),
-    # dann nehmen wir alle als Info.
-    if not relevant and final_action == "HOLD":
-        relevant = decisions
-        avg_conf = 0.0
+    if final_action == "BUY":
+        relevant = [d for d in decisions if d.action == "BUY"]
+    elif final_action == "SELL":
+        relevant = [d for d in decisions if d.action == "SELL"]
     else:
-        avg_conf = sum(d.confidence for d in relevant) / len(relevant) if relevant else 0.0
+        relevant = [d for d in decisions if d.action == "HOLD"]
+        if not relevant: relevant = decisions
+
+    avg_conf = sum(d.confidence for d in relevant) / len(relevant) if relevant else 0.0
 
     return {
         "action": final_action,
-        "vote_count": f"{count}/{total_votes} (Original: {best_action})",
+        "vote_count": f"Score: {score} (B:{buy_votes}, S:{sell_votes}, H:{hold_votes})",
         "avg_confidence": round(avg_conf, 2),
         "details": relevant
     }
