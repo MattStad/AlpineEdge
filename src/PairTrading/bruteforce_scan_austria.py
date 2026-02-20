@@ -8,10 +8,55 @@ import numpy as np
 # ========================
 
 tickers = [
-    "ANDR.VI", "BG.VI", "CAI.VI", "EBS.VI", "FLU.VI", "LNZ.VI", "MMK.VI",
-    "OMV.VI", "POST.VI", "RBI.VI", "SBO.VI", "STR.VI", "TKA.VI", "UQA.VI",
-    "VOE.VI", "VIG.VI", "VER.VI", "ATS.VI", "FLU.VI", "SPI.VI",
-    "DOC.VI", "ROS.VI", "WIE.VI", "FQT.VI", "MARI.VI",
+    "AGR.VI",  # Agrana
+    "ADKO.VI",  # Addiko Bank AG
+    "AMAG.VI",  # AMAG Austria Metall
+    "ANDR.VI",  # Andritz
+    "ATS.VI",  # AT&S
+    "ACAG.AT",  # Austriacard Holdings AG
+    "BG.VI",  # BAWAG Group
+    "BKS.VI",  # BKS Bank
+    "BTS.VI",  # Bank für Tirol und Vorarlberg
+    "BHD.VI",  # Burgenland Holding
+    "BMAG.VI",  # Bajaj Mobility AG
+    "CAI.VI",  # CA Immo
+    "CPI.VI",  # CPI Property Group
+    "DOC.VI",  # DO & CO
+    "EBS.VI",  # Erste Group Bank
+    "ETS.VI",  # EuroTeleSites
+    "EVN.VI",  # EVN
+    "FLU.VI",  # Flughafen Wien
+    "FQT.VI",  # Frequentis
+    "FACC.VI",  # FACC AG
+    "GAGV.VI",  # Gurktaler AG
+    "KTCG.VI",  # Kapsch TrafficCom
+    "KTN.VI",  # Kontron
+    "LNZ.VI",  # Lenzing
+    "MARI.VI",  # Marinomed Biotech
+    "MMK.VI",  # Mayr-Melnhof Karton
+    "OBS.VI",  # Oberbank
+    "OMV.VI",  # OMV
+    "POST.VI",  # Österreichische Post
+    "PAL.VI",  # Palfinger
+    "PYT.VI",  # Polytec Holding
+    "POS.VI",  # PORR
+    "RBI.VI",  # Raiffeisen Bank International
+    "RHIM.VI",  # RHI Magnesita
+    "ROS.VI",  # Rosenbauer
+    "SBO.VI",  # Schoeller-Bleckmann
+    "SEM.VI",  # Semperit
+    "STR.VI",  # Strabag
+    "SWUT.VI",  # SW Umwelttechnik
+    "TKA.VI",  # Telekom Austria
+    "UBS.VI",  # UBM Development
+    "UQA.VI",  # UNIQA Insurance Group
+    "VLA.VI",  # Valneva
+    "VER.VI",  # Verbund
+    "VIG.VI",  # Vienna Insurance Group
+    "VOE.VI",  # voestalpine
+    "WIE.VI",  # Wienerberger
+    "WOL.VI",  # Wolford
+    "ZAG.VI"  # Zumtobel
 ]
 
 START = "2010-01-01"

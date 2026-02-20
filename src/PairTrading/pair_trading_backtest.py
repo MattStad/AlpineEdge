@@ -407,8 +407,8 @@ def plot_spread_zscore(data: pd.DataFrame, title: str, t1: str, t2: str):
 # =========================
 
 if __name__ == "__main__":
-    T1 = "EBS.VI"
-    T2 = "STR.VI"
+    T1 = "MMK.VI"
+    T2 = "WIE.VI"
     START = "2010-01-01"
     END = datetime.today().date().isoformat()
 
